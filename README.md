@@ -21,7 +21,7 @@ La app ejecuta QEMU por software, con 4 núcleos virtuales y 3 GiB de RAM para e
 Con **JDK 17**, **Gradle 8.9** y el SDK de Android instalado:
 
 ```sh
-sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+sdkmanager 'platforms;android-35' 'build-tools;34.0.0'
 gradle :app:assembleDebug :app:lintDebug
 ```
 
