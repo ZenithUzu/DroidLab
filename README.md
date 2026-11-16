@@ -22,8 +22,9 @@ DroidLab reconoce cabeceras ext4, EROFS y Android sparse. La importación compru
 | --- | --- |
 | Biblioteca local de varias GSI | Importar, ver detalles, renombrar y eliminar desde el APK |
 | Arrancar un invitado ARM64 desde ISO o disco RAW | Motor experimental separado, accesible en **⋮ → Motor experimental (Termux)** |
-| Arrancar AOSP 16 y Miku UI Blooming A3 | Pendiente de integrar la base Android y verificar el arranque en el POCO F7 Pro |
-| QEMU integrado y pantalla del invitado en DroidLab | Pendiente |
+| Arrancar AOSP 14 y Miku UI Udon v2 | Pendiente de integrar la base Android y verificar el arranque en el POCO F7 Pro |
+| QEMU ARM64 integrado | Prueba experimental autónoma en **⋮ → Comprobar motor integrado** |
+| Pantalla del invitado Android en DroidLab | Pendiente |
 
 ## Compilar el APK
 
@@ -35,6 +36,25 @@ gradle :app:assembleDebug :app:lintDebug :app:testDebugUnitTest
 ```
 
 El APK se genera en `app/build/outputs/apk/debug/app-debug.apk`. También se puede descargar como artefacto **DroidLab-debug** en una ejecución exitosa de [GitHub Actions](https://github.com/ZenithUzu/DroidLab/actions/workflows/android.yml).
+
+## Motor ARM64 integrado (experimental)
+
+El APK de GitHub Actions incluye QEMU ARM64 con TCG. Desde **⋮ → Comprobar motor integrado**,
+DroidLab inicia QEMU y ejecuta un pequeño programa invitado que devuelve una señal por el puerto serial.
+La prueba se ejecuta desde el APK sin Termux. La ejecución de Android y el arranque de las ROMs importadas
+requieren una base invitada con sus particiones y controladores virtuales.
+
+Para reproducir el APK con el motor, ejecuta en Linux con Python 3.10+, `readelf`, `dpkg-deb` y
+`patchelf` 0.19.3 antes de compilar con Gradle:
+
+```sh
+python3 engine/native/package_qemu.py --out app/build/generated/nativeEngine
+gradle :app:assembleDebug :app:lintDebug :app:testDebugUnitTest
+```
+
+Las sumas SHA-256 de los paquetes y la revisión de sus recetas y parches están en
+[termux-arm64.lock.json](engine/native/termux-arm64.lock.json). El APK incluye el manifiesto
+`assets/qemu/sources.json` con los paquetes usados. [Código fuente y recetas de Termux](https://github.com/termux/termux-packages/tree/65ec9af258548453164acccf96e007411f1ea81d)
 
 ## Preparar Termux
 
@@ -72,8 +92,8 @@ Usa la opción de apagado del propio invitado si este no responde a la solicitud
 
 ## Objetivo Android y Miku UI
 
-La primera candidata es **Miku UI Blooming A3**, una GSI oficial ARM64 basada en Android 16. El siguiente hito es arrancar **AOSP 16** con un kernel, un sistema de arranque y un `vendor` adaptados al mismo dispositivo virtual de QEMU. Luego podremos cambiar la imagen de sistema por la GSI de Miku UI y validar que llegue a inicio, responda al tacto y conserve datos tras reiniciar.
+La primera candidata de prueba es **Miku UI Udon v2 0.12.0**, la GSI ARM64 de Android 14 importada en el POCO F7 Pro. El siguiente hito es arrancar **AOSP 14** con un kernel, un sistema de arranque y un `vendor` adaptados al mismo dispositivo virtual de QEMU. Luego podremos cambiar la imagen de sistema por la GSI de Udon v2 y validar que llegue a inicio, responda al tacto y conserve datos tras reiniciar.
 
 Una GSI contiene la imagen de sistema. El perfil virtual debe proveer el resto de las particiones y componentes de arranque, así que copiar `system.img` como `disk.raw` no es suficiente.
 
-[GSI Blooming A3 (elige system.img o system_gapps.img)](https://sourceforge.net/projects/divarelease/files/gsi_phone_arm64_Blooming_A3/) · [Canal oficial de Miku UI](https://t.me/s/mikuuirelease) · [Documentación de GSIs](https://developer.android.com/topic/generic-system-image)
+[Udon v2 en GitHub](https://github.com/xiaoleGun/treble_build_miku/releases/tag/Udon_v2-0.12.0) · [GSI Blooming A3](https://sourceforge.net/projects/divarelease/files/gsi_phone_arm64_Blooming_A3/) · [Canal oficial de Miku UI](https://t.me/s/mikuuirelease) · [Documentación de GSIs](https://developer.android.com/topic/generic-system-image)

@@ -6,12 +6,24 @@ android {
     namespace 'com.zenithuzu.droidlab'
     compileSdk 35
 
+    sourceSets.main {
+        jniLibs.srcDir layout.buildDirectory.dir('generated/nativeEngine/jniLibs')
+        assets.srcDir layout.buildDirectory.dir('generated/nativeEngine/assets')
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += ['**/libdroidlab_qemu.so', '**/libdlq_*.so']
+        }
+    }
+
     defaultConfig {
         applicationId 'com.zenithuzu.droidlab'
         minSdk 26
         targetSdk 35
-        versionCode 4
-        versionName '0.2.2'
+        versionCode 5
+        versionName '0.2.3'
     }
 
     compileOptions {

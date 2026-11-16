@@ -309,11 +309,40 @@ public final class MainActivity extends Activity implements RomLibrary.Observer 
 
     private void showOptions(View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
+        menu.getMenu().add("Comprobar motor integrado").setOnMenuItemClickListener(item -> {
+            probeNativeEngine();
+            return true;
+        });
         menu.getMenu().add("Motor experimental (Termux)").setOnMenuItemClickListener(item -> {
             startActivity(new Intent(this, LegacyActivity.class));
             return true;
         });
         menu.show();
+    }
+
+    private void probeNativeEngine() {
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Motor integrado")
+                .setMessage("Iniciando una máquina ARM64 de prueba…")
+                .setPositiveButton("Cerrar", null)
+                .show();
+        new Thread(() -> {
+            String message;
+            try {
+                message = NativeEngine.probe(getApplicationContext());
+            } catch (java.io.IOException error) {
+                message = error.getMessage();
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                message = "Se interrumpió la comprobación.";
+            }
+            String result = message;
+            runOnUiThread(() -> {
+                if (!isDestroyed() && dialog.isShowing()) {
+                    dialog.setMessage(result);
+                }
+            });
+        }, "droidlab-engine-probe").start();
     }
 
     private void showRomMenu(RomLibrary.Rom rom, View anchor) {
