@@ -41,7 +41,7 @@ final class NativeEngine {
                     "-machine", "virt", "-cpu", "max", "-accel", "tcg",
                     "-m", "128", "-smp", "1", "-nodefaults", "-display", "none",
                     "-nic", "none", "-serial", "file:serial.log",
-                    "-device", "loader,file=probe.bin,addr=0x40080000,cpu-num=0,force-raw=on",
+                    "-device", "loader,file=probe.bin,addr=0x41000000,cpu-num=0,force-raw=on",
                     "-S", "-qmp", "stdio");
             launcher.directory(workspace.toFile());
             launcher.environment().put("LD_LIBRARY_PATH", libraryDirectory.getAbsolutePath());
