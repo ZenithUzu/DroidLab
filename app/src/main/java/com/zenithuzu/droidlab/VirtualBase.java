@@ -30,6 +30,8 @@ final class VirtualBase {
     private static final long DOWNLOAD_SIZE = 1004217012L;
     private static final String[] DISKS = {"vda.img", "vdb.qcow2", "efi_vars.fd"};
     private static final long BOOT_ENTRY_OFFSET = 30_000_647;
+    private static final long ANIMATION_OPTION_OFFSET = 29_990_193;
+    private static final String ANIMATION_OPTION = "if [ \"$android_nobootanim\" = \"1\" ]; then";
     private static final String UPSTREAM_ENTRY = "menuentry \"LineageOS 23.0"
             + "${kernel_version_display_mainmenu}\" --class android --id android {\n"
             + "\tset_android_default android\n\tboot_android\n}";
@@ -179,16 +181,23 @@ final class VirtualBase {
                 + (gsi ? " androidboot.fstab_suffix=virtio.gsi.vdc" : "")
                 + " androidboot.low_perf=1\n}").getBytes(StandardCharsets.US_ASCII);
         try (RandomAccessFile image = new RandomAccessFile(disk.toFile(), "rw")) {
-            byte[] current = new byte[original.length];
-            image.seek(BOOT_ENTRY_OFFSET);
-            image.readFully(current);
-            if (!Arrays.equals(original, current) || replacement.length > original.length) {
-                throw new IOException("La entrada de arranque no coincide con la base virtual.");
-            }
-            Arrays.fill(current, (byte) ' ');
-            System.arraycopy(replacement, 0, current, 0, replacement.length);
-            image.seek(BOOT_ENTRY_OFFSET);
-            image.write(current);
+            patch(image, BOOT_ENTRY_OFFSET, original, replacement);
+            patch(image, ANIMATION_OPTION_OFFSET, ANIMATION_OPTION.getBytes(StandardCharsets.US_ASCII),
+                    "if true; then".getBytes(StandardCharsets.US_ASCII));
         }
+    }
+
+    private static void patch(RandomAccessFile image, long offset, byte[] expected, byte[] replacement)
+            throws IOException {
+        byte[] current = new byte[expected.length];
+        image.seek(offset);
+        image.readFully(current);
+        if (!Arrays.equals(expected, current) || replacement.length > current.length) {
+            throw new IOException("La entrada de arranque no coincide con la base virtual.");
+        }
+        Arrays.fill(current, (byte) ' ');
+        System.arraycopy(replacement, 0, current, 0, replacement.length);
+        image.seek(offset);
+        image.write(current);
     }
 }
