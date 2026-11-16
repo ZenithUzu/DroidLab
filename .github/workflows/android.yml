@@ -52,6 +52,7 @@ jobs:
               assert "lib/arm64-v8a/libdroidlab_qemu.so" in files
               assert any(f.startswith("lib/arm64-v8a/libdlq_") for f in files)
               assert "assets/qemu/sources.json" in files
+              assert "assets/qemu/edk2-aarch64-code.fd" in files
           PYCODE
       - uses: actions/upload-artifact@v4
         with:

@@ -31,6 +31,24 @@ def fetch(record, downloads):
     return name, destination
 
 
+def install_firmware(info, workspace):
+    url = ("https://deb.debian.org/debian/pool/main/e/edk2/"
+           "qemu-efi-aarch64_2025.02-8+deb13u1_all.deb")
+    deb = workspace / "debian-edk2.deb"
+    with urlopen(url, timeout=60) as response, deb.open("wb") as output:
+        shutil.copyfileobj(response, output)
+    if hashlib.sha256(deb.read_bytes()).hexdigest() != \
+            "a00b2411a79c8aeafd95a7c868ac3cd1aab592f1af9fff965f02d81a625276ed":
+        raise ValueError("SHA-256 mismatch: Debian EDK II firmware")
+    firmware = workspace / "firmware"
+    subprocess.run(["dpkg-deb", "-x", deb, firmware], check=True)
+    shutil.copyfile(firmware / "usr/share/AAVMF/AAVMF_CODE.no-secboot.fd",
+                    info / "edk2-aarch64-code.fd")
+    shutil.copyfile(firmware / "usr/share/doc/qemu-efi-aarch64/copyright",
+                    info / "EDK2-COPYRIGHT")
+    return "https://packages.debian.org/source/trixie/edk2"
+
+
 def needed(path):
     dynamic = subprocess.check_output(["readelf", "-d", path], text=True)
     return re.findall(r"\(NEEDED\).*?\[([^\]]+)\]", dynamic)
@@ -120,6 +138,7 @@ def main():
         sources = {
             "termux_sources": f"https://github.com/termux/termux-packages/tree/{lock['termux_sources']}",
             "qemu_upstream_source": "https://download.qemu.org/qemu-11.1.3.tar.xz",
+            "firmware_source": install_firmware(info, workspace),
             "packages": {key: lock["packages"][key] for key in sorted(used)},
         }
         (info / "sources.json").write_text(json.dumps(sources, indent=2) + "\n")

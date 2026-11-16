@@ -2,7 +2,17 @@
 
 **Laboratorio de ROMs Android en tu teléfono**
 
-DroidLab es un proyecto gratuito para organizar y probar ROMs Android como sistemas invitados. La biblioteca de DroidLab 0.2 guarda varias GSI en el teléfono con perfiles separados. Funciona localmente, sin cuenta, suscripción ni Termux para gestionar archivos.
+DroidLab es un proyecto gratuito para organizar y probar ROMs Android con QEMU ARM64 integrado. Las máquinas y sus datos viven en el teléfono. El arranque virtual se hace desde la app.
+
+## Arrancar una ROM
+
+1. Abre **⋮ → Bases virtuales** e instala **LineageOS 23.0 · Android 16 ARM64**. La app descarga 1.00 GB y verifica su SHA-256 antes de extraer los discos.
+2. Importa una GSI ARM64 compatible desde **+ Importar**. Abre su tarjeta y toca **Arrancar**. DroidLab prepara un disco de datos y conecta la GSI como el disco de sistema del invitado.
+3. Usa la pantalla de la app para interactuar con el invitado. En el primer arranque, Android prepara aplicaciones y datos. Si el invitado se detiene, el botón **Registro** muestra la salida de QEMU y del kernel.
+
+DroidLab extrae el disco de la base y crea una copia privada para cada perfil. Reserva espacio adicional para la GSI y los datos de Android. Con **Abrir LineageOS** puedes iniciar la base con un perfil propio.
+
+[Base para QEMU de jqssun](https://github.com/jqssun/android-lineage-qemu/releases/tag/v2025.10.14) · [GSIs de Google](https://developer.android.com/topic/generic-system-image/releases)
 
 ## Importar y administrar ROMs
 
@@ -12,9 +22,9 @@ DroidLab es un proyecto gratuito para organizar y probar ROMs Android como siste
 
 Durante la importación, una tarjeta muestra el archivo en turno, la etapa y los bytes procesados. El porcentaje se refiere a la etapa actual y aparece cuando se conoce su tamaño. Al descomprimir XZ, se muestra cuánto se ha escrito hasta el momento.
 
-Cada importación guarda una copia de la imagen en el espacio privado de DroidLab y reserva un directorio independiente para los datos del futuro invitado. Puedes importar dos variantes de Miku UI y darles nombres distintos. Eliminar una tarjeta borra su copia y sus datos de perfil. El archivo de origen permanece en Archivos.
+Cada importación guarda una copia de la imagen en el espacio privado de DroidLab y reserva un directorio independiente para los datos del invitado. Puedes importar dos variantes de Miku UI y darles nombres distintos. Eliminar una tarjeta borra su copia y sus datos de perfil. El archivo de origen permanece en Archivos.
 
-DroidLab reconoce cabeceras ext4, EROFS y Android sparse. La importación comprueba el formato, y la compatibilidad de arranque se verificará con la base virtual. Los ZIP de actualización de un dispositivo, por ejemplo los que contienen `payload.bin`, se rechazan. Durante la importación de un ZIP se necesita espacio para guardar temporalmente el archivo comprimido y la imagen extraída.
+DroidLab reconoce cabeceras ext4, EROFS y Android sparse. La importación comprueba el formato. La imagen debe ser compatible con el kernel, las HAL y la política SELinux de la base virtual. Los ZIP de actualización de un dispositivo, por ejemplo los que contienen `payload.bin`, se rechazan. Durante la importación de un ZIP se necesita espacio para guardar temporalmente el archivo comprimido y la imagen extraída.
 
 ## Estado actual
 
@@ -22,9 +32,9 @@ DroidLab reconoce cabeceras ext4, EROFS y Android sparse. La importación compru
 | --- | --- |
 | Biblioteca local de varias GSI | Importar, ver detalles, renombrar y eliminar desde el APK |
 | Arrancar un invitado ARM64 desde ISO o disco RAW | Motor experimental separado, accesible en **⋮ → Motor experimental (Termux)** |
-| Arrancar AOSP 14 y Miku UI Udon v2 | Pendiente de integrar la base Android y verificar el arranque en el POCO F7 Pro |
+| Miku UI Udon v2 (Android 14) | La base Android 16 monta el sistema, pero se detiene por incompatibilidad de SELinux |
 | QEMU ARM64 integrado | Prueba experimental autónoma en **⋮ → Comprobar motor integrado** |
-| Pantalla del invitado Android en DroidLab | Pendiente |
+| Pantalla y entrada del invitado Android | Integradas en el APK mediante un socket privado de QEMU |
 
 ## Compilar el APK
 
@@ -37,7 +47,7 @@ gradle :app:assembleDebug :app:lintDebug :app:testDebugUnitTest
 
 El APK se genera en `app/build/outputs/apk/debug/app-debug.apk`. También se puede descargar como artefacto **DroidLab-debug** en una ejecución exitosa de [GitHub Actions](https://github.com/ZenithUzu/DroidLab/actions/workflows/android.yml).
 
-## Motor ARM64 integrado (experimental)
+## Motor ARM64 integrado
 
 El APK de GitHub Actions incluye QEMU ARM64 con TCG. Desde **⋮ → Comprobar motor integrado**,
 DroidLab inicia QEMU y ejecuta un pequeño programa invitado que devuelve una señal por el puerto serial.
@@ -90,10 +100,10 @@ python ~/.droidlab/droidlab.py stop alpine
 
 Usa la opción de apagado del propio invitado si este no responde a la solicitud. El comando `force-stop` termina QEMU de inmediato y puede perder escrituras que el invitado todavía no guardó.
 
-## Objetivo Android y Miku UI
+## Compatibilidad de las ROMs
 
-La primera candidata de prueba es **Miku UI Udon v2 0.12.0**, la GSI ARM64 de Android 14 importada en el POCO F7 Pro. El siguiente hito es arrancar **AOSP 14** con un kernel, un sistema de arranque y un `vendor` adaptados al mismo dispositivo virtual de QEMU. Luego podremos cambiar la imagen de sistema por la GSI de Udon v2 y validar que llegue a inicio, responda al tacto y conserve datos tras reiniciar.
+La base incluida corresponde a Android 16. **Miku UI Udon v2 0.12.0** es Android 14 y, en la prueba de arranque, carecía de `/system/etc/selinux/mapping/202504.cil`, requerido por el `vendor` de la base LineageOS de Android 16. Se necesita una base compatible con Android 14 para esa ROM. La revisión de Android también importa dentro de una misma versión, ya que las políticas de la base y del sistema pueden cambiar entre actualizaciones.
 
-Una GSI contiene la imagen de sistema. El perfil virtual debe proveer el resto de las particiones y componentes de arranque, así que copiar `system.img` como `disk.raw` no es suficiente.
+Los ZIP que contienen una GSI se abren como imágenes de sistema. Los ZIP de actualización con `payload.bin` y las ROMs específicas de un modelo requieren un método de instalación y una base virtual compatibles con ese paquete.
 
-[Udon v2 en GitHub](https://github.com/xiaoleGun/treble_build_miku/releases/tag/Udon_v2-0.12.0) · [GSI Blooming A3](https://sourceforge.net/projects/divarelease/files/gsi_phone_arm64_Blooming_A3/) · [Canal oficial de Miku UI](https://t.me/s/mikuuirelease) · [Documentación de GSIs](https://developer.android.com/topic/generic-system-image)
+[Udon v2 en GitHub](https://github.com/xiaoleGun/treble_build_miku/releases/tag/Udon_v2-0.12.0) · [GSI Blooming A3](https://sourceforge.net/projects/divarelease/files/gsi_phone_arm64_Blooming_A3/) · [Documentación de GSIs](https://developer.android.com/topic/generic-system-image)

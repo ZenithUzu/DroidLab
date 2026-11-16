@@ -1,10 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
     <queries>
         <package android:name="com.termux" />
     </queries>
     <application android:allowBackup="false" android:icon="@drawable/ic_droidlab"
         android:label="DroidLab" android:theme="@style/Theme.DroidLab">
+        <activity android:name=".VmActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".LegacyActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true"
             android:windowSoftInputMode="adjustResize">

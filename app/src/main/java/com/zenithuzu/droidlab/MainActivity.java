@@ -309,6 +309,10 @@ public final class MainActivity extends Activity implements RomLibrary.Observer 
 
     private void showOptions(View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
+        menu.getMenu().add("Bases virtuales").setOnMenuItemClickListener(item -> {
+            showVirtualBases(null);
+            return true;
+        });
         menu.getMenu().add("Comprobar motor integrado").setOnMenuItemClickListener(item -> {
             probeNativeEngine();
             return true;
@@ -318,6 +322,60 @@ public final class MainActivity extends Activity implements RomLibrary.Observer 
             return true;
         });
         menu.show();
+    }
+
+    private void showVirtualBases(RomLibrary.Rom pendingRom) {
+        boolean installed = VirtualBase.installed(this);
+        new AlertDialog.Builder(this).setTitle("Base virtual Android")
+                .setMessage(installed ? VirtualBase.LABEL + " instalada"
+                        : VirtualBase.LABEL + "\nDescarga desde GitHub: 1.00 GB.")
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton(installed ? (pendingRom == null ? "Abrir LineageOS" : "Arrancar") : "Instalar", (dialog, value) -> {
+                    if (installed) openMachine(pendingRom);
+                    else installVirtualBase(pendingRom);
+                }).show();
+    }
+
+    private void installVirtualBase(RomLibrary.Rom pendingRom) {
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Instalando base virtual")
+                .setMessage("Preparando descarga…").setCancelable(false).show();
+        new Thread(() -> {
+            String problem = null;
+            try {
+                VirtualBase.install(getApplicationContext(), (stage, bytes, total) ->
+                        runOnUiThread(() -> {
+                            if (!isDestroyed()) dialog.setMessage(stage + " · "
+                                    + Formatter.formatFileSize(this, bytes) + " de "
+                                    + Formatter.formatFileSize(this, total));
+                        }));
+            } catch (java.io.IOException error) {
+                problem = error.getMessage();
+            }
+            String failure = problem;
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                dialog.dismiss();
+                if (failure != null) {
+                    new AlertDialog.Builder(this).setTitle("No se pudo instalar la base")
+                            .setMessage(failure).setPositiveButton("Cerrar", null).show();
+                } else if (pendingRom != null && !working) {
+                    openMachine(pendingRom);
+                } else {
+                    showVirtualBases(null);
+                }
+            });
+        }, "droidlab-base").start();
+    }
+
+    private void openMachine(RomLibrary.Rom rom) {
+        if (!VirtualBase.installed(this)) {
+            showVirtualBases(rom);
+            return;
+        }
+        Intent intent = new Intent(this, VmActivity.class)
+                .putExtra(VmActivity.TITLE, rom == null ? VirtualBase.LABEL : rom.title);
+        if (rom != null) intent.putExtra(VmActivity.ID, rom.directory.getFileName().toString());
+        startActivity(intent);
     }
 
     private void probeNativeEngine() {
@@ -347,6 +405,10 @@ public final class MainActivity extends Activity implements RomLibrary.Observer 
 
     private void showRomMenu(RomLibrary.Rom rom, View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
+        menu.getMenu().add("Arrancar").setOnMenuItemClickListener(item -> {
+            if (!working) openMachine(rom);
+            return true;
+        });
         menu.getMenu().add("Ver detalles").setOnMenuItemClickListener(item -> {
             showRomDetails(rom);
             return true;
@@ -380,12 +442,13 @@ public final class MainActivity extends Activity implements RomLibrary.Observer 
         source.setTextIsSelectable(true);
         add(panel, source, 4);
 
-        TextView boot = label("Arranque pendiente", 14, MINT, true);
-        add(panel, boot, 18);
-        add(panel, label("La imagen ya está guardada. Falta la base virtual Android para ejecutarla.",
-                14, MUTED, false), 4);
+        add(panel, button(VirtualBase.installed(this) ? "Arrancar" : "Instalar base virtual",
+                true, () -> {
+                    dialog.dismiss();
+                    if (!working) openMachine(rom);
+                }), 18);
 
-        Button close = button("Cerrar", true, dialog::dismiss);
+        Button close = button("Cerrar", false, dialog::dismiss);
         LinearLayout.LayoutParams closeLayout = new LinearLayout.LayoutParams(-2, -2);
         closeLayout.gravity = Gravity.END;
         closeLayout.topMargin = dp(18);
