@@ -49,6 +49,35 @@ final class RomLibrary {
 
     interface Observer {
         void onLibraryChanged(List<Rom> roms, boolean working, String status);
+        void onImportProgress(ImportProgress progress);
+    }
+
+    static final class ImportProgress {
+        final String file;
+        final int position;
+        final int count;
+        final RomImage.Stage stage;
+        final long bytes;
+        final long total;
+
+        ImportProgress(String file, int position, int count, RomImage.Stage stage, long bytes, long total) {
+            this.file = file;
+            this.position = position;
+            this.count = count;
+            this.stage = stage;
+            this.bytes = bytes;
+            this.total = total;
+        }
+    }
+
+    private static final class Source {
+        final String name;
+        final long size;
+
+        Source(String name, long size) {
+            this.name = name;
+            this.size = size;
+        }
     }
 
     private interface Action {
@@ -64,6 +93,7 @@ final class RomLibrary {
     private List<Rom> roms = Collections.emptyList();
     private boolean working;
     private String status = "";
+    private ImportProgress importProgress;
 
     static RomLibrary get(Context context) {
         if (instance == null) {
@@ -84,6 +114,7 @@ final class RomLibrary {
     void observe(Observer observer) {
         observers.add(observer);
         observer.onLibraryChanged(roms, working, status);
+        observer.onImportProgress(importProgress);
     }
 
     void unobserve(Observer observer) {
@@ -94,13 +125,16 @@ final class RomLibrary {
         run(sources.size() == 1 ? "Importando imagen…" : "Importando imágenes…", () -> {
             int imported = 0;
             List<String> errors = new ArrayList<>();
-            for (Uri uri : sources) {
-                String name = sourceName(uri);
+            for (int index = 0; index < sources.size(); index++) {
+                Uri uri = sources.get(index);
+                Source source = sourceInfo(uri);
+                int position = index + 1;
                 try {
-                    add(uri, name);
+                    add(uri, source, (stage, bytes, total) -> reportImportProgress(
+                            new ImportProgress(source.name, position, sources.size(), stage, bytes, total)));
                     imported++;
                 } catch (IOException | SecurityException error) {
-                    errors.add(name + " · " + message(error));
+                    errors.add(source.name + " · " + message(error));
                 }
             }
             String summary = imported == 1 ? "1 ROM importada" : imported + " ROMs importadas";
@@ -124,7 +158,7 @@ final class RomLibrary {
         });
     }
 
-    private void add(Uri uri, String name) throws IOException {
+    private void add(Uri uri, Source source, RomImage.Progress progress) throws IOException {
         String id = UUID.randomUUID().toString();
         Path pending = root.resolve(".import-" + id);
         Files.createDirectory(pending);
@@ -134,10 +168,11 @@ final class RomLibrary {
                 if (input == null) {
                     throw new IOException("No se pudo abrir el archivo.");
                 }
-                format = RomImage.importImage(input, name, pending);
+                format = RomImage.importImage(input, source.name, source.size, pending, progress);
             }
+            progress.update(RomImage.Stage.SAVE, 0, -1);
             Files.createDirectory(pending.resolve("data"));
-            writeMetadata(pending, defaultTitle(name), name, format);
+            writeMetadata(pending, defaultTitle(source.name), source.name, format);
             Files.move(pending, root.resolve(id), StandardCopyOption.ATOMIC_MOVE);
         } finally {
             removeTree(pending);
@@ -211,19 +246,31 @@ final class RomLibrary {
         }
     }
 
-    private String sourceName(Uri uri) {
-        try (Cursor cursor = resolver.query(uri, new String[] {OpenableColumns.DISPLAY_NAME},
-                null, null, null)) {
-            if (cursor != null && cursor.moveToFirst() && cursor.getColumnCount() > 0) {
-                String name = cursor.getString(0);
+    private Source sourceInfo(Uri uri) {
+        try (Cursor cursor = resolver.query(uri,
+                new String[] {OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int nameColumn = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                int sizeColumn = cursor.getColumnIndex(OpenableColumns.SIZE);
+                String name = nameColumn >= 0 ? cursor.getString(nameColumn) : null;
+                long size = sizeColumn >= 0 && !cursor.isNull(sizeColumn) ? cursor.getLong(sizeColumn) : -1;
                 if (name != null && !name.trim().isEmpty()) {
-                    return name;
+                    return new Source(name, size);
                 }
             }
         } catch (RuntimeException error) {
-            Log.w("DroidLab", "No se pudo leer el nombre del archivo seleccionado.", error);
+            Log.w("DroidLab", "No se pudo leer el archivo seleccionado.", error);
         }
-        return "Imagen sin nombre";
+        return new Source("Imagen sin nombre", -1);
+    }
+
+    private void reportImportProgress(ImportProgress progress) {
+        main.post(() -> {
+            importProgress = progress;
+            for (Observer observer : new ArrayList<>(observers)) {
+                observer.onImportProgress(progress);
+            }
+        });
     }
 
     private static String defaultTitle(String name) {
@@ -265,6 +312,10 @@ final class RomLibrary {
             String finalStatus = result;
             List<Rom> finalRoms = updated;
             main.post(() -> {
+                importProgress = null;
+                for (Observer observer : new ArrayList<>(observers)) {
+                    observer.onImportProgress(null);
+                }
                 status = finalStatus;
                 roms = finalRoms;
                 working = false;

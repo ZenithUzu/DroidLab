@@ -10,6 +10,8 @@ DroidLab es un proyecto gratuito para organizar y probar ROMs Android como siste
 2. Elige una o varias imágenes desde Archivos. Se admiten `.img`, `.gsi`, `.img.xz` y ZIP con una sola imagen de sistema reconocible, por ejemplo `system.img` o `system_gapps.img`.
 3. Toca una tarjeta para ver el archivo de origen, formato y tamaño. Usa **⋮** para renombrar o eliminar esa ROM.
 
+Durante la importación, una tarjeta muestra el archivo en turno, la etapa y los bytes procesados. El porcentaje se refiere a la etapa actual y aparece cuando se conoce su tamaño. Al descomprimir XZ, se muestra cuánto se ha escrito hasta el momento.
+
 Cada importación guarda una copia de la imagen en el espacio privado de DroidLab y reserva un directorio independiente para los datos del futuro invitado. Puedes importar dos variantes de Miku UI y darles nombres distintos. Eliminar una tarjeta borra su copia y sus datos de perfil. El archivo de origen permanece en Archivos.
 
 DroidLab reconoce cabeceras ext4, EROFS y Android sparse. La importación comprueba el formato, y la compatibilidad de arranque se verificará con la base virtual. Los ZIP de actualización de un dispositivo, por ejemplo los que contienen `payload.bin`, se rechazan. Durante la importación de un ZIP se necesita espacio para guardar temporalmente el archivo comprimido y la imagen extraída.

@@ -40,8 +40,14 @@ public final class MainActivity extends Activity implements RomLibrary.Observer 
 
     private RomLibrary library;
     private Button importButton;
+    private ScrollView scroll;
     private TextView count;
     private TextView feedback;
+    private LinearLayout importPanel;
+    private TextView importPosition;
+    private TextView importFile;
+    private TextView importStage;
+    private TextView importBytes;
     private ProgressBar progress;
     private LinearLayout cards;
     private boolean working;
@@ -76,7 +82,7 @@ public final class MainActivity extends Activity implements RomLibrary.Observer 
         header.addView(overflow, overflowLayout);
         root.addView(header);
 
-        ScrollView scroll = new ScrollView(this);
+        scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         LinearLayout content = column();
         content.setPadding(dp(22), dp(16), dp(22), dp(24));
@@ -90,11 +96,7 @@ public final class MainActivity extends Activity implements RomLibrary.Observer 
         feedback.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         feedback.setTextIsSelectable(true);
         add(content, feedback, 8);
-        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progress.setIndeterminate(true);
-        progress.setIndeterminateTintList(ColorStateList.valueOf(MINT));
-        progress.setContentDescription("Operación en curso");
-        add(content, progress, 8);
+        add(content, buildImportPanel(), 16);
         cards = column();
         add(content, cards, 16);
 
@@ -154,7 +156,6 @@ public final class MainActivity extends Activity implements RomLibrary.Observer 
     public void onLibraryChanged(List<RomLibrary.Rom> roms, boolean busy, String status) {
         working = busy;
         importButton.setEnabled(!busy);
-        progress.setVisibility(busy ? View.VISIBLE : View.GONE);
         feedback.setText(status);
         feedback.setVisibility(status.isEmpty() ? View.GONE : View.VISIBLE);
         count.setText(roms.size() == 1 ? "1 ROM en tu biblioteca" : roms.size() + " ROMs en tu biblioteca");
@@ -177,6 +178,80 @@ public final class MainActivity extends Activity implements RomLibrary.Observer 
                 row.addView(cell, layout);
             }
             add(cards, row, first == 0 ? 0 : 12);
+        }
+    }
+
+    private LinearLayout buildImportPanel() {
+        importPanel = column();
+        GradientDrawable panel = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[] {0xff234139, SURFACE});
+        panel.setCornerRadius(dp(22));
+        panel.setStroke(dp(1), 0xff3b6456);
+        importPanel.setBackground(panel);
+        importPanel.setPadding(dp(18), dp(16), dp(18), dp(16));
+        importPanel.setVisibility(View.GONE);
+
+        LinearLayout heading = new LinearLayout(this);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        heading.addView(label("Importación en curso", 17, TEXT, true),
+                new LinearLayout.LayoutParams(0, -2, 1));
+        importPosition = label("", 13, MINT, true);
+        importPosition.setPadding(dp(8), 0, 0, 0);
+        heading.addView(importPosition);
+        importPanel.addView(heading);
+
+        importFile = label("", 15, TEXT, false);
+        importFile.setMaxLines(2);
+        importFile.setEllipsize(TextUtils.TruncateAt.END);
+        add(importPanel, importFile, 8);
+        importStage = label("", 14, MINT, false);
+        importStage.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        add(importPanel, importStage, 10);
+
+        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progress.setMax(100);
+        progress.setIndeterminateTintList(ColorStateList.valueOf(MINT));
+        progress.setProgressTintList(ColorStateList.valueOf(MINT));
+        progress.setProgressBackgroundTintList(ColorStateList.valueOf(0xff426154));
+        progress.setContentDescription("Progreso de la etapa de importación");
+        LinearLayout.LayoutParams bar = new LinearLayout.LayoutParams(-1, dp(12));
+        bar.topMargin = dp(6);
+        importPanel.addView(progress, bar);
+        importBytes = label("", 13, MUTED, false);
+        add(importPanel, importBytes, 5);
+        return importPanel;
+    }
+
+    @Override
+    public void onImportProgress(RomLibrary.ImportProgress update) {
+        if (update == null) {
+            importPanel.setVisibility(View.GONE);
+            return;
+        }
+        feedback.setVisibility(View.GONE);
+        if (importPanel.getVisibility() != View.VISIBLE) {
+            importPanel.setVisibility(View.VISIBLE);
+            scroll.smoothScrollTo(0, 0);
+        }
+        setIfChanged(importPosition, update.position + " de " + update.count);
+        setIfChanged(importFile, update.file);
+        setIfChanged(importStage, update.stage.label);
+        boolean knownTotal = update.total > 0;
+        progress.setIndeterminate(!knownTotal);
+        if (knownTotal) {
+            int percent = (int) Math.min(100L, update.bytes * 100 / update.total);
+            progress.setProgress(percent);
+            importBytes.setText(Formatter.formatFileSize(this, update.bytes) + " de "
+                    + Formatter.formatFileSize(this, update.total) + " · " + percent + " %");
+        } else if (update.bytes > 0) {
+            importBytes.setText(Formatter.formatFileSize(this, update.bytes) + " procesados");
+        }
+        importBytes.setVisibility(knownTotal || update.bytes > 0 ? View.VISIBLE : View.GONE);
+    }
+
+    private void setIfChanged(TextView view, String text) {
+        if (!TextUtils.equals(view.getText(), text)) {
+            view.setText(text);
         }
     }
 

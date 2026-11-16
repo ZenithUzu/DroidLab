@@ -13,7 +13,9 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -94,8 +96,38 @@ public class RomImageTest {
         assertEquals("Android sparse", importInto(header, "system.img", temporary.newFolder().toPath()));
     }
 
+    @Test
+    public void reportsZipCopyExtractionAndVerificationWithSeparateTotals() throws IOException {
+        byte[] system = fileSystem(1080, 0x0000ef53);
+        byte[] source = zip(Map.of("system.img", system));
+        List<String> events = new ArrayList<>();
+        RomImage.importImage(new ByteArrayInputStream(source), "rom.zip", source.length,
+                temporary.newFolder().toPath(),
+                (stage, bytes, total) -> events.add(stage + ":" + bytes + "/" + total));
+        assertEquals(List.of(
+                "COPY_ZIP:0/" + source.length,
+                "COPY_ZIP:" + source.length + "/" + source.length,
+                "INSPECT_ZIP:0/-1",
+                "EXTRACT_ZIP:0/" + system.length,
+                "EXTRACT_ZIP:" + system.length + "/" + system.length,
+                "VERIFY:0/-1"), new ArrayList<>(new java.util.LinkedHashSet<>(events)));
+    }
+
+    @Test
+    public void reportsExpandedXzBytesWithoutInventingATotal() throws IOException {
+        byte[] system = fileSystem(1080, 0x0000ef53);
+        byte[] source = xz(system);
+        List<String> events = new ArrayList<>();
+        RomImage.importImage(new ByteArrayInputStream(source), "rom.img.xz", source.length,
+                temporary.newFolder().toPath(),
+                (stage, bytes, total) -> events.add(stage + ":" + bytes + "/" + total));
+        assertEquals(List.of("EXTRACT_XZ:0/-1", "EXTRACT_XZ:" + system.length + "/-1",
+                "VERIFY:0/-1"), new ArrayList<>(new java.util.LinkedHashSet<>(events)));
+    }
+
     private static String importInto(byte[] source, String name, Path profile) throws IOException {
-        return RomImage.importImage(new ByteArrayInputStream(source), name, profile);
+        return RomImage.importImage(new ByteArrayInputStream(source), name, source.length, profile,
+                (stage, bytes, total) -> {});
     }
 
     private static byte[] fileSystem(int offset, int magic) {
