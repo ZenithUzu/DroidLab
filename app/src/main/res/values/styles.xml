@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.DroidLab" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:colorAccent">#A4F6CE</item>
+        <item name="android:windowBackground">#101815</item>
+        <item name="android:navigationBarColor">#101815</item>
+        <item name="android:statusBarColor">#101815</item>
+    </style>
+</resources>
