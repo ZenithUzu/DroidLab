@@ -1,248 +1,338 @@
 package com.zenithuzu.droidlab;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ClipData;
-import android.content.ClipboardManager;
 import android.content.Intent;
-import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
-import android.text.InputType;
+import android.text.InputFilter;
+import android.text.TextUtils;
+import android.text.format.Formatter;
+import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.PopupMenu;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-public final class MainActivity extends Activity {
-    private static final String TERMUX = "com.termux";
-    private static final String PERMISSION = TERMUX + ".permission.RUN_COMMAND";
-    private static final String TERMUX_FILES = "/data/data/com.termux/files";
-    private static final String VNC_ADDRESS = "127.0.0.1:5900";
-    private static final int BACKGROUND = Color.rgb(16, 24, 21);
-    private static final int PANEL = Color.rgb(26, 39, 33);
-    private static final int MINT = Color.rgb(164, 246, 206);
-    private static final int TEXT = Color.rgb(237, 247, 240);
-    private static final int MUTED = Color.rgb(168, 189, 179);
-    private static final int REQUEST_TERMUX = 1;
+import java.util.ArrayList;
+import java.util.List;
 
-    private EditText profile;
+public final class MainActivity extends Activity implements RomLibrary.Observer {
+    private static final int PICK_ROMS = 1;
+    private static final int BG = 0xff101815;
+    private static final int SURFACE = 0xff1b2923;
+    private static final int TEXT = 0xffedf7f0;
+    private static final int MUTED = 0xffacc0b5;
+    private static final int MINT = 0xffa4f6ce;
+
+    private RomLibrary library;
+    private Button importButton;
+    private TextView count;
     private TextView feedback;
-    private String pendingAction;
-    private String pendingProfile;
+    private ProgressBar progress;
+    private LinearLayout cards;
+    private boolean working;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        if (state != null) {
-            pendingAction = state.getString("pendingAction");
-            pendingProfile = state.getString("pendingProfile");
-        }
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setBackgroundColor(BACKGROUND);
-        LinearLayout page = column();
-        page.setPadding(dp(24), dp(28), dp(24), dp(24));
-        scroll.addView(page);
+        library = RomLibrary.get(this);
+
+        LinearLayout root = column();
+        root.setBackgroundColor(BG);
         if (Build.VERSION.SDK_INT >= 30) {
-            scroll.setOnApplyWindowInsetsListener((view, insets) -> {
-                var edges = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-                var keyboard = insets.getInsets(WindowInsets.Type.ime());
-                view.setPadding(edges.left, edges.top, edges.right, Math.max(edges.bottom, keyboard.bottom));
+            root.setOnApplyWindowInsetsListener((view, insets) -> {
+                var bars = insets.getInsets(WindowInsets.Type.systemBars()
+                        | WindowInsets.Type.displayCutout());
+                view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
                 return WindowInsets.CONSUMED;
             });
         }
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(22), dp(12), dp(18), dp(8));
+        TextView title = label("DroidLab", 32, TEXT, true);
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        importButton = button("+ Importar", true, this::pickRoms);
+        header.addView(importButton, new LinearLayout.LayoutParams(-2, -2));
+        Button overflow = button("⋮", false, null);
+        overflow.setContentDescription("Opciones de DroidLab");
+        overflow.setOnClickListener(this::showOptions);
+        LinearLayout.LayoutParams overflowLayout = new LinearLayout.LayoutParams(dp(48), dp(48));
+        overflowLayout.leftMargin = dp(6);
+        header.addView(overflow, overflowLayout);
+        root.addView(header);
 
-        TextView title = label("DroidLab", 44, TEXT);
-        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        title.setLetterSpacing(-0.045f);
-        add(page, title, 0);
-        add(page, label("Laboratorio de ROMs Android", 17, MUTED), 4);
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        LinearLayout content = column();
+        content.setPadding(dp(22), dp(16), dp(22), dp(24));
+        scroll.addView(content);
+        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        LinearLayout machine = card();
-        add(page, machine, 28);
-        heading(machine, "Máquina virtual");
-        add(machine, label("Usa el nombre de un perfil preparado en Termux.", 15, MUTED), 8);
-        add(machine, label("Perfil", 14, TEXT), 18);
-        profile = new EditText(this);
-        profile.setSingleLine(true);
-        profile.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        profile.setContentDescription("Nombre del perfil");
-        profile.setTextColor(TEXT);
-        profile.setBackground(surface(BACKGROUND, 12));
-        profile.setPadding(dp(14), dp(12), dp(14), dp(12));
-        profile.setText(getPreferences(MODE_PRIVATE).getString("profile", "alpine"));
-        add(machine, profile, 6);
-        add(machine, button("Arrancar máquina", true, () -> runInTermux("start")), 14);
-        add(machine, button("Consultar estado", false, () -> runInTermux("status")), 8);
-        add(machine, button("Solicitar apagado", false, () -> runInTermux("stop")), 8);
-        feedback = label("", 14, MINT);
+        content.addView(label("Mis ROMs", 23, TEXT, true));
+        count = label("", 14, MUTED, false);
+        add(content, count, 4);
+        feedback = label("", 14, MINT, false);
         feedback.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        feedback.setVisibility(View.GONE);
-        add(machine, feedback, 12);
+        feedback.setTextIsSelectable(true);
+        add(content, feedback, 8);
+        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progress.setIndeterminate(true);
+        progress.setIndeterminateTintList(ColorStateList.valueOf(MINT));
+        progress.setContentDescription("Operación en curso");
+        add(content, progress, 8);
+        cards = column();
+        add(content, cards, 16);
 
-        LinearLayout display = card();
-        add(page, display, 14);
-        heading(display, "Pantalla del invitado");
-        add(display, label("Conecta un visor VNC local al arrancar la máquina.", 15, MUTED), 8);
-        add(display, label(VNC_ADDRESS, 18, MINT), 10);
-        add(display, button("Copiar dirección VNC", false, this::copyAddress), 10);
-
-        LinearLayout setup = card();
-        add(page, setup, 14);
-        heading(setup, "Preparar el motor");
-        add(setup, label("El prototipo usa QEMU en Termux. Miku UI es el objetivo de la primera prueba con Android.", 15, MUTED), 8);
-        add(setup, button("Abrir guía de instalación", false, () -> open(
-                "https://github.com/ZenithUzu/DroidLab#preparar-termux")), 10);
-        setContentView(scroll);
-        page.setFocusableInTouchMode(true);
-        page.requestFocus();
+        setContentView(root);
     }
 
     @Override
-    protected void onSaveInstanceState(Bundle state) {
-        super.onSaveInstanceState(state);
-        state.putString("pendingAction", pendingAction);
-        state.putString("pendingProfile", pendingProfile);
+    protected void onStart() {
+        super.onStart();
+        library.observe(this);
     }
 
-    private void runInTermux(String action) {
-        String name = profile.getText().toString().trim();
-        if (!name.matches("[a-z0-9][a-z0-9-]{0,31}")) {
-            profile.setError("Usa entre 1 y 32 letras minúsculas, números o guiones.");
-            return;
-        }
+    @Override
+    protected void onStop() {
+        library.unobserve(this);
+        super.onStop();
+    }
+
+    private void pickRoms() {
+        Intent pick = new Intent(Intent.ACTION_GET_CONTENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("*/*")
+                .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
         try {
-            getPackageManager().getPackageInfo(TERMUX, 0);
-        } catch (PackageManager.NameNotFoundException e) {
-            showFeedback("Instala Termux y sigue la guía de instalación.");
-            return;
+            startActivityForResult(pick, PICK_ROMS);
+        } catch (android.content.ActivityNotFoundException error) {
+            feedback.setText("No se encontró un selector de archivos.");
+            feedback.setVisibility(View.VISIBLE);
         }
-        if (checkSelfPermission(PERMISSION) != PackageManager.PERMISSION_GRANTED) {
-            if (getPreferences(MODE_PRIVATE).getBoolean("permissionAsked", false)
-                    && !shouldShowRequestPermissionRationale(PERMISSION)) {
-                showFeedback("Habilita el permiso de Termux en los ajustes de DroidLab y vuelve a intentarlo.");
-                startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.parse("package:" + getPackageName())));
-                return;
-            }
-            pendingAction = action;
-            pendingProfile = name;
-            getPreferences(MODE_PRIVATE).edit().putBoolean("permissionAsked", true).apply();
-            requestPermissions(new String[] {PERMISSION}, REQUEST_TERMUX);
-            return;
-        }
-        dispatch(action, name);
     }
 
     @Override
-    public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
-        super.onRequestPermissionsResult(request, permissions, results);
-        if (request == REQUEST_TERMUX && pendingAction != null) {
-            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
-                dispatch(pendingAction, pendingProfile);
-            } else {
-                showFeedback("DroidLab necesita permiso para iniciar QEMU en Termux.");
+    protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != PICK_ROMS || result != RESULT_OK || data == null) {
+            return;
+        }
+        List<Uri> uris = new ArrayList<>();
+        ClipData selection = data.getClipData();
+        if (selection != null) {
+            for (int index = 0; index < selection.getItemCount(); index++) {
+                Uri uri = selection.getItemAt(index).getUri();
+                if (uri != null && !uris.contains(uri)) {
+                    uris.add(uri);
+                }
             }
-            pendingAction = null;
-            pendingProfile = null;
+        }
+        if (uris.isEmpty() && data.getData() != null) {
+            uris.add(data.getData());
+        }
+        if (!uris.isEmpty()) {
+            library.importRoms(uris);
         }
     }
 
-    private void dispatch(String action, String name) {
-        Intent command = new Intent(TERMUX + ".RUN_COMMAND");
-        command.setClassName(TERMUX, TERMUX + ".app.RunCommandService");
-        command.putExtra(TERMUX + ".RUN_COMMAND_PATH", TERMUX_FILES + "/usr/bin/python3");
-        command.putExtra(TERMUX + ".RUN_COMMAND_ARGUMENTS", new String[] {
-                TERMUX_FILES + "/home/.droidlab/droidlab.py", action, name
+    @Override
+    public void onLibraryChanged(List<RomLibrary.Rom> roms, boolean busy, String status) {
+        working = busy;
+        importButton.setEnabled(!busy);
+        progress.setVisibility(busy ? View.VISIBLE : View.GONE);
+        feedback.setText(status);
+        feedback.setVisibility(status.isEmpty() ? View.GONE : View.VISIBLE);
+        count.setText(roms.size() == 1 ? "1 ROM en tu biblioteca" : roms.size() + " ROMs en tu biblioteca");
+        cards.removeAllViews();
+        if (roms.isEmpty()) {
+            if (!busy) {
+                showEmpty();
+            }
+            return;
+        }
+
+        int columns = getResources().getConfiguration().screenWidthDp >= 360 ? 2 : 1;
+        for (int first = 0; first < roms.size(); first += columns) {
+            LinearLayout row = new LinearLayout(this);
+            for (int position = 0; position < columns; position++) {
+                int index = first + position;
+                View cell = index < roms.size() ? romCard(roms.get(index), index) : new View(this);
+                LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -1, 1);
+                layout.leftMargin = position == 0 ? 0 : dp(12);
+                row.addView(cell, layout);
+            }
+            add(cards, row, first == 0 ? 0 : 12);
+        }
+    }
+
+    private void showEmpty() {
+        LinearLayout empty = column();
+        empty.setBackground(surface(SURFACE, 22));
+        empty.setPadding(dp(20), dp(22), dp(20), dp(20));
+        empty.addView(label("Importa tu primera GSI", 20, TEXT, true));
+        add(empty, label("Selecciona una o varias imágenes .img, .img.xz o ZIP desde Archivos.",
+                15, MUTED, false), 8);
+        cards.addView(empty);
+    }
+
+    private View romCard(RomLibrary.Rom rom, int index) {
+        LinearLayout card = column();
+        card.setBackground(surface(SURFACE, 20));
+        card.setClipToOutline(true);
+
+        int[][] colors = {{0xff276c56, 0xff173c34}, {0xff215b69, 0xff173840},
+                {0xff485e3f, 0xff293c2b}};
+        GradientDrawable cover = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                colors[index % colors.length]);
+        FrameLayout artwork = new FrameLayout(this);
+        artwork.setBackground(cover);
+        TextView initials = label("GSI", 32, TEXT, true);
+        initials.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        FrameLayout.LayoutParams artworkText = new FrameLayout.LayoutParams(-2, -2,
+                Gravity.BOTTOM | Gravity.START);
+        artworkText.setMargins(dp(14), 0, 0, dp(10));
+        artwork.addView(initials, artworkText);
+        Button menu = button("⋮", false, null);
+        menu.setContentDescription("Opciones de " + rom.title);
+        menu.setEnabled(!working);
+        menu.setOnClickListener(view -> showRomMenu(rom, view));
+        artwork.addView(menu, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.END | Gravity.TOP));
+        card.addView(artwork, new LinearLayout.LayoutParams(-1, dp(94)));
+
+        LinearLayout details = column();
+        details.setPadding(dp(12), dp(10), dp(12), dp(12));
+        TextView name = label(rom.title, 17, TEXT, true);
+        name.setMaxLines(2);
+        name.setMinLines(2);
+        name.setEllipsize(TextUtils.TruncateAt.END);
+        details.addView(name);
+        add(details, label(Formatter.formatFileSize(this, rom.size), 13, MUTED, false), 2);
+        add(details, label("Importada", 13, MINT, true), 5);
+        card.addView(details);
+        details.setFocusable(true);
+        details.setOnClickListener(view -> showRomDetails(rom));
+        return card;
+    }
+
+    private void showOptions(View anchor) {
+        PopupMenu menu = new PopupMenu(this, anchor);
+        menu.getMenu().add("Motor experimental (Termux)").setOnMenuItemClickListener(item -> {
+            startActivity(new Intent(this, LegacyActivity.class));
+            return true;
         });
-        command.putExtra(TERMUX + ".RUN_COMMAND_WORKDIR", TERMUX_FILES + "/home");
-        command.putExtra(TERMUX + ".RUN_COMMAND_BACKGROUND", false);
-        // Termux opens this terminal session through its foreground service.
-        command.putExtra(TERMUX + ".RUN_COMMAND_SESSION_ACTION", "0");
-        try {
-            if (startService(command) == null) {
-                showFeedback("Abre Termux y comprueba que el motor esté instalado.");
+        menu.show();
+    }
+
+    private void showRomMenu(RomLibrary.Rom rom, View anchor) {
+        PopupMenu menu = new PopupMenu(this, anchor);
+        menu.getMenu().add("Ver detalles").setOnMenuItemClickListener(item -> {
+            showRomDetails(rom);
+            return true;
+        });
+        menu.getMenu().add("Renombrar").setOnMenuItemClickListener(item -> {
+            if (!working) rename(rom);
+            return true;
+        });
+        menu.getMenu().add("Eliminar").setOnMenuItemClickListener(item -> {
+            if (!working) delete(rom);
+            return true;
+        });
+        menu.show();
+    }
+
+    private void showRomDetails(RomLibrary.Rom rom) {
+        new AlertDialog.Builder(this)
+                .setTitle(rom.title)
+                .setMessage(rom.source + "\n" + rom.format + " · "
+                        + Formatter.formatFileSize(this, rom.size)
+                        + "\n\nEl arranque de esta GSI está pendiente de la base virtual Android.")
+                .setPositiveButton("Cerrar", null)
+                .show();
+    }
+
+    private void rename(RomLibrary.Rom rom) {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setFilters(new InputFilter[] {new InputFilter.LengthFilter(120)});
+        input.setText(rom.title);
+        input.selectAll();
+        LinearLayout box = column();
+        box.setPadding(dp(22), dp(8), dp(22), 0);
+        box.addView(input);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Renombrar ROM")
+                .setView(box)
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Guardar", null)
+                .create();
+        dialog.show();
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
+            String name = input.getText().toString().trim();
+            if (name.isEmpty()) {
+                input.setError("Escribe un nombre.");
                 return;
             }
-            getPreferences(MODE_PRIVATE).edit().putString("profile", name).apply();
-            showFeedback("Solicitud enviada. Consulta el resultado en Termux.");
-        } catch (IllegalStateException | SecurityException e) {
-            showFeedback("Termux rechazó la solicitud. Revisa el permiso y la configuración del motor.");
-        }
+            library.rename(rom, name);
+            dialog.dismiss();
+        });
     }
 
-    private void showFeedback(String message) {
-        feedback.setText(message);
-        feedback.setVisibility(View.VISIBLE);
-    }
-
-    private void copyAddress() {
-        ClipboardManager clipboard = getSystemService(ClipboardManager.class);
-        clipboard.setPrimaryClip(ClipData.newPlainText("Dirección VNC", VNC_ADDRESS));
-        if (Build.VERSION.SDK_INT < 33) {
-            android.widget.Toast.makeText(this, "Dirección copiada", android.widget.Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void open(String url) {
-        try {
-            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-        } catch (android.content.ActivityNotFoundException e) {
-            android.widget.Toast.makeText(this, "Instala un navegador para abrir la guía.", android.widget.Toast.LENGTH_SHORT).show();
-        }
+    private void delete(RomLibrary.Rom rom) {
+        new AlertDialog.Builder(this)
+                .setTitle("¿Eliminar " + rom.title + "?")
+                .setMessage("Se borrarán la copia importada y los datos de este perfil en DroidLab. "
+                        + "El archivo de origen seguirá en Archivos.")
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Eliminar", (dialog, button) -> library.delete(rom))
+                .show();
     }
 
     private LinearLayout column() {
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        return layout;
+        LinearLayout view = new LinearLayout(this);
+        view.setOrientation(LinearLayout.VERTICAL);
+        return view;
     }
 
-    private LinearLayout card() {
-        LinearLayout panel = column();
-        panel.setPadding(dp(18), dp(18), dp(18), dp(18));
-        panel.setBackground(surface(PANEL, 22));
-        return panel;
-    }
-
-    private void heading(LinearLayout parent, String text) {
-        TextView heading = label(text, 21, TEXT);
-        heading.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        if (Build.VERSION.SDK_INT >= 28) {
-            heading.setAccessibilityHeading(true);
-        }
-        add(parent, heading, 0);
-    }
-
-    private TextView label(String value, int size, int color) {
+    private TextView label(String text, int size, int color, boolean bold) {
         TextView view = new TextView(this);
-        view.setText(value);
+        view.setText(text);
         view.setTextSize(size);
         view.setTextColor(color);
+        if (bold) {
+            view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        }
         return view;
     }
 
     private Button button(String title, boolean primary, Runnable action) {
-        Button control = new Button(this);
-        control.setText(title);
-        control.setAllCaps(false);
-        control.setTextSize(15);
-        control.setTextColor(primary ? BACKGROUND : TEXT);
-        control.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        control.setMinHeight(dp(48));
-        control.setBackground(new android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(0x338AAB97),
-                surface(primary ? MINT : BACKGROUND, 12), null));
-        control.setOnClickListener(view -> action.run());
-        return control;
+        Button button = new Button(this);
+        button.setText(title);
+        button.setAllCaps(false);
+        button.setMinHeight(dp(48));
+        button.setMinimumWidth(0);
+        button.setMinWidth(0);
+        button.setPadding(dp(primary ? 13 : 4), 0, dp(primary ? 13 : 4), 0);
+        button.setTextColor(primary ? BG : TEXT);
+        button.setBackground(new RippleDrawable(ColorStateList.valueOf(0x4495bdab),
+                surface(primary ? MINT : Color.TRANSPARENT, 14), surface(Color.WHITE, 14)));
+        if (action != null) {
+            button.setOnClickListener(view -> action.run());
+        }
+        return button;
     }
 
     private GradientDrawable surface(int color, int radius) {
@@ -252,10 +342,9 @@ public final class MainActivity extends Activity {
         return drawable;
     }
 
-    private void add(LinearLayout parent, View view, int margin) {
-        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        layout.topMargin = dp(margin);
+    private void add(LinearLayout parent, View view, int topMargin) {
+        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2);
+        layout.topMargin = dp(topMargin);
         parent.addView(view, layout);
     }
 

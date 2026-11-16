@@ -2,19 +2,26 @@
 
 **Laboratorio de ROMs Android en tu teléfono**
 
-DroidLab es un proyecto para ejecutar sistemas invitados ARM64 dentro de Android. La primera versión conecta el APK con QEMU en Termux y usa un visor VNC para mostrar la pantalla del invitado. Cada perfil guarda sus imágenes virtuales y registros en un directorio de Termux.
+DroidLab es un proyecto gratuito para organizar y probar ROMs Android como sistemas invitados. La biblioteca de DroidLab 0.2 guarda varias GSI en el teléfono con perfiles separados. Funciona localmente, sin cuenta, suscripción ni Termux para gestionar archivos.
+
+## Importar y administrar ROMs
+
+1. Abre **Mis ROMs** y toca **+ Importar**.
+2. Elige una o varias imágenes desde Archivos. Se admiten `.img`, `.gsi`, `.img.xz` y ZIP con una sola imagen de sistema reconocible, por ejemplo `system.img` o `system_gapps.img`.
+3. Toca una tarjeta para ver el archivo de origen, formato y tamaño. Usa **⋮** para renombrar o eliminar esa ROM.
+
+Cada importación guarda una copia de la imagen en el espacio privado de DroidLab y reserva un directorio independiente para los datos del futuro invitado. Puedes importar dos variantes de Miku UI y darles nombres distintos. Eliminar una tarjeta borra su copia y sus datos de perfil. El archivo de origen permanece en Archivos.
+
+DroidLab reconoce cabeceras ext4, EROFS y Android sparse. La importación comprueba el formato, y la compatibilidad de arranque se verificará con la base virtual. Los ZIP de actualización de un dispositivo, por ejemplo los que contienen `payload.bin`, se rechazan. Durante la importación de un ZIP se necesita espacio para guardar temporalmente el archivo comprimido y la imagen extraída.
 
 ## Estado actual
 
 | Función | Estado |
 | --- | --- |
-| Arrancar un invitado ARM64 desde UEFI, ISO o disco RAW | Motor inicial con QEMU en Termux |
-| Consultar estado y solicitar apagado | Implementado mediante QMP |
-| Pantalla, teclado y apuntador virtuales | Visor VNC externo, por conexión local |
-| Compilar el APK | GitHub Actions genera un APK de depuración |
-| Arrancar AOSP 16 y Miku UI Blooming A3 | Pendiente de adaptar y verificar el hardware virtual Android |
-
-La app ejecuta QEMU por software, con 4 núcleos virtuales y 3 GiB de RAM para el invitado. La VM funciona sin red invitada. El POCO F7 Pro es el primer teléfono objetivo y puede conservar HyperOS y su bootloader bloqueado.
+| Biblioteca local de varias GSI | Importar, ver detalles, renombrar y eliminar desde el APK |
+| Arrancar un invitado ARM64 desde ISO o disco RAW | Motor experimental separado, accesible en **⋮ → Motor experimental (Termux)** |
+| Arrancar AOSP 16 y Miku UI Blooming A3 | Pendiente de integrar la base Android y verificar el arranque en el POCO F7 Pro |
+| QEMU integrado y pantalla del invitado en DroidLab | Pendiente |
 
 ## Compilar el APK
 
@@ -22,12 +29,14 @@ Con **JDK 17**, **Gradle 8.9** y el SDK de Android instalado:
 
 ```sh
 sdkmanager 'platforms;android-35' 'build-tools;34.0.0'
-gradle :app:assembleDebug :app:lintDebug
+gradle :app:assembleDebug :app:lintDebug :app:testDebugUnitTest
 ```
 
 El APK se genera en `app/build/outputs/apk/debug/app-debug.apk`. También se puede descargar como artefacto **DroidLab-debug** en una ejecución exitosa de [GitHub Actions](https://github.com/ZenithUzu/DroidLab/actions/workflows/android.yml).
 
 ## Preparar Termux
+
+Esta sección es para probar el motor experimental con un invitado compatible, como Alpine Linux. Puedes utilizar la biblioteca de GSI directamente desde el APK.
 
 1. Instala una versión actual de [Termux](https://github.com/termux/termux-app#installation) y un visor VNC. Abre Termux para que complete su instalación.
 2. Instala el motor y descarga el lanzador de DroidLab.
@@ -46,7 +55,7 @@ El APK se genera en `app/build/outputs/apk/debug/app-debug.apk`. También se pue
 
 Usa la ISO **Virtual aarch64** de [Alpine Linux](https://alpinelinux.org/downloads/) como prueba de firmware, pantalla y entrada. Verifica su suma SHA-256 publicada y guarda la ISO como `~/.droidlab/profiles/alpine/boot.iso`. También puedes añadir un disco RAW al perfil como `disk.raw` si vas a instalar un sistema. Un disco RAW ya arrancable se puede usar por sí solo.
 
-En DroidLab, usa el perfil **alpine**, toca **Arrancar máquina** y conecta el visor a **127.0.0.1:5900**. La conexión VNC escucha en el propio teléfono, sin contraseña. Otras apps del mismo teléfono pueden acceder a ese puerto. El motor admite un invitado activo a la vez.
+En **⋮ → Motor experimental (Termux)**, usa el perfil **alpine**, toca **Arrancar máquina** y conecta el visor a **127.0.0.1:5900**. La conexión VNC escucha en el propio teléfono, sin contraseña. Otras apps del mismo teléfono pueden acceder a ese puerto. El motor admite un invitado activo a la vez.
 
 Los mensajes del motor se imprimen en Termux. Cada perfil guarda `serial.log` y `qemu.log` del último arranque. Para usar el motor directamente:
 
@@ -65,4 +74,4 @@ La primera candidata es **Miku UI Blooming A3**, una GSI oficial ARM64 basada en
 
 Una GSI contiene la imagen de sistema. El perfil virtual debe proveer el resto de las particiones y componentes de arranque, así que copiar `system.img` como `disk.raw` no es suficiente.
 
-[Canal oficial de Miku UI](https://t.me/s/mikuuirelease) · [Documentación de GSIs](https://developer.android.com/topic/generic-system-image)
+[GSI Blooming A3 (elige system.img o system_gapps.img)](https://sourceforge.net/projects/divarelease/files/gsi_phone_arm64_Blooming_A3/) · [Canal oficial de Miku UI](https://t.me/s/mikuuirelease) · [Documentación de GSIs](https://developer.android.com/topic/generic-system-image)
