@@ -2,12 +2,14 @@ package com.zenithuzu.droidlab;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.ClipData;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -17,6 +19,7 @@ import android.text.TextUtils;
 import android.text.format.Formatter;
 import android.view.Gravity;
 import android.view.View;
+import android.view.Window;
 import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.EditText;
@@ -173,7 +176,7 @@ public final class MainActivity extends Activity implements RomLibrary.Observer 
             for (int position = 0; position < columns; position++) {
                 int index = first + position;
                 View cell = index < roms.size() ? romCard(roms.get(index), index) : new View(this);
-                LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -1, 1);
+                LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
                 layout.leftMargin = position == 0 ? 0 : dp(12);
                 row.addView(cell, layout);
             }
@@ -331,13 +334,42 @@ public final class MainActivity extends Activity implements RomLibrary.Observer 
     }
 
     private void showRomDetails(RomLibrary.Rom rom) {
-        new AlertDialog.Builder(this)
-                .setTitle(rom.title)
-                .setMessage(rom.source + "\n" + rom.format + " · "
-                        + Formatter.formatFileSize(this, rom.size)
-                        + "\n\nEl arranque de esta GSI está pendiente de la base virtual Android.")
-                .setPositiveButton("Cerrar", null)
-                .show();
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        ScrollView scrollDetails = new ScrollView(this);
+        LinearLayout panel = column();
+        panel.setPadding(dp(20), dp(20), dp(20), dp(14));
+        scrollDetails.addView(panel);
+        panel.addView(label("Detalles de la ROM", 21, TEXT, true));
+        add(panel, label(rom.title, 17, TEXT, true), 10);
+        add(panel, label(rom.format + " · " + Formatter.formatFileSize(this, rom.size),
+                14, MUTED, false), 6);
+
+        add(panel, label("Archivo de origen", 14, MUTED, true), 18);
+        TextView source = label(rom.source, 14, TEXT, false);
+        source.setTextIsSelectable(true);
+        add(panel, source, 4);
+
+        TextView boot = label("Arranque pendiente", 14, MINT, true);
+        add(panel, boot, 18);
+        add(panel, label("La imagen ya está guardada. Falta la base virtual Android para ejecutarla.",
+                14, MUTED, false), 4);
+
+        Button close = button("Cerrar", true, dialog::dismiss);
+        LinearLayout.LayoutParams closeLayout = new LinearLayout.LayoutParams(-2, -2);
+        closeLayout.gravity = Gravity.END;
+        closeLayout.topMargin = dp(18);
+        panel.addView(close, closeLayout);
+
+        dialog.setContentView(scrollDetails);
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new InsetDrawable(surface(SURFACE, 24), dp(22), dp(12),
+                    dp(22), dp(12)));
+            window.setLayout(-1, -2);
+        }
     }
 
     private void rename(RomLibrary.Rom rom) {
